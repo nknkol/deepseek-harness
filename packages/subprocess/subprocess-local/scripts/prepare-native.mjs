@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
 const KOFFI_VERSION = '3.1.5'
-const NODE_PTY_VERSION = '1.1.0'
+const NODE_PTY_VERSION = '1.2.0-beta.15'
 
 function packageRoot(name, from) {
   let entry

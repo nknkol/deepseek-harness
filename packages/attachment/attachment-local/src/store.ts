@@ -2,12 +2,13 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { chmod, link, mkdir, open, readFile, unlink } from 'node:fs/promises'
+import { chmod, mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { dirname, join, parse, resolve } from 'node:path'
 import {
   AttachmentError,
   AttachmentId,
 } from '@deepseek-ai/dsh-attachment'
+import { publishNoReplace } from '@deepseek-ai/dsh-atomic-write'
 import type {
   ImageAttachmentLimits,
   ImageAttachmentRef,
@@ -155,7 +156,7 @@ export async function saveImageFile(root: string, input: SaveImageAttachment, li
     await handle.close()
     handle = undefined
     try {
-      await link(temporary, target)
+      await publishNoReplace(temporary, target)
     } catch (error) {
       /* v8 ignore next -- Private same-filesystem directories make EEXIST the only recoverable link race. */
       if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
@@ -168,7 +169,10 @@ export async function saveImageFile(root: string, input: SaveImageAttachment, li
     // that writer reaches its own durability boundary.
     await syncDirectory(bucket)
     await syncDirectory(join(root, 'objects'))
-    await unlink(temporary)
+    await unlink(temporary).catch((error: unknown) => {
+      /* v8 ignore next -- renameat2 publication consumes the temp path before cleanup. */
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
+    })
   } catch (error) {
     /* v8 ignore next -- A descriptor can remain open only when the underlying write/sync/close operation fails. */
     if (handle !== undefined) await handle.close().catch(

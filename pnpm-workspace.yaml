@@ -24,9 +24,21 @@ packages:
 # builds must resolve those matching names to this workspace's pinned sources.
 linkWorkspacePackages: true
 
+packageExtensions:
+  lefthook@2.1.9:
+    optionalDependencies:
+      lefthook-openharmony-arm64: 'npm:lefthook-linux-arm64@2.1.9'
+  lightningcss@1.32.0:
+    optionalDependencies:
+      lightningcss-openharmony-arm64: 'npm:lightningcss-linux-arm64-musl@1.32.0'
+  oxlint-tsgolint@7.0.2001:
+    optionalDependencies:
+      '@oxlint-tsgolint/openharmony-arm64': 'npm:@oxlint-tsgolint/linux-arm64@7.0.2001'
+
 overrides:
   '@deepseek-ai/cosmokit': 'link:vendor/cosmokit'
   '@deepseek-ai/schemastery': 'link:vendor/schemastery'
+  'vitepress@1.6.4>vite': 6.4.3
 
 peerDependencyRules:
   allowedVersions:
@@ -48,8 +60,9 @@ allowBuilds:
   '@google/genai': false
   protobufjs: false
   node-addon-require-builtin: false
-  # JSONL durability calls MoveFileExW with write-through publication on Windows.
-  koffi: true
+  # The root postinstall builds Koffi with uname-is-linux on OpenHarmony; supported
+  # platforms use Koffi's optional native packages instead of its install script.
+  koffi: false
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true

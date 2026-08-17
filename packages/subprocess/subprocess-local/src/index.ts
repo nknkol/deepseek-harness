@@ -26,6 +26,7 @@ import type { LocalSubprocessHandle, SpawnInternals } from './spawn.ts'
 import { createProcessInspector } from './process-inspector.ts'
 import type { ProcessInspector } from './process-inspector.ts'
 import { LocalTerminalHandle } from './terminal.ts'
+import { createPtyForegroundPgidReader } from './pty-foreground.ts'
 
 /**
  * Local subprocess service: detached process trees, Node-shaped stdio
@@ -157,7 +158,6 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
   }
 
   // Local PTY allocation is synchronous, but the provider contract permits remote asynchronous allocation.
-  // oxlint-disable-next-line typescript/require-await -- Preserve promise rejection semantics at the async provider contract.
   async spawnTerminal(spec: SubprocessTerminalSpawnSpec): Promise<SubprocessTerminalHandle> {
     const file = spec.argv[0]
     if (file === undefined || file.length === 0) {
@@ -173,7 +173,21 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     }
     const inspector = this.terminalInspector ?? createProcessInspector()
     const terminal = nodePty.spawn(file, [...spec.argv.slice(1)], options)
-    const handle = new LocalTerminalHandle(terminal, inspector, spec.graceMs)
+    const platform = process.platform as NodeJS.Platform | 'openharmony'
+    let foregroundPgidReader
+    try {
+      foregroundPgidReader = platform === 'openharmony'
+        ? await createPtyForegroundPgidReader(terminal)
+        : undefined
+    } catch (error) {
+      try {
+        terminal.kill('SIGKILL')
+      } catch (_terminalSetupKillFailed) {
+        // Preserve the setup error when the native terminal is already gone.
+      }
+      throw error
+    }
+    const handle = new LocalTerminalHandle(terminal, inspector, spec.graceMs, foregroundPgidReader)
     this.terminals.add(handle)
     const release = async (): Promise<void> => {
       await handle.terminate()

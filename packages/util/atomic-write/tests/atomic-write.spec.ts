@@ -1,8 +1,8 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, readdir, rename, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { withFileLock, writeFileAtomic } from '../src/index.ts'
+import { publishNoReplace, withFileLock, writeFileAtomic } from '../src/index.ts'
 
 async function scratch(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'dsh-atomic-write-'))
@@ -58,5 +58,26 @@ describe('withFileLock', () => {
       called = true
     })).rejects.toThrow(/ENOENT|ENOTDIR|not a directory/i)
     expect(called).toBe(false)
+  })
+})
+
+describe('publishNoReplace', () => {
+  it('uses the no-replace fallback when hard links are unavailable', async () => {
+    const dir = await scratch()
+    const source = join(dir, 'source')
+    const target = join(dir, 'target')
+    await writeFile(source, 'content')
+    let fallbackCalled = false
+
+    await publishNoReplace(source, target, {
+      linkFile: async () => { throw Object.assign(new Error('hard links disabled'), { code: 'EACCES' }) },
+      renameNoReplace: async (from, to) => {
+        fallbackCalled = true
+        await rename(from, to)
+      },
+    })
+
+    expect(fallbackCalled).toBe(true)
+    expect(await readFile(target, 'utf8')).toBe('content')
   })
 })

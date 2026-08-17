@@ -11,6 +11,7 @@ import type {
   SubprocessTerminalSignal,
 } from '@deepseek-ai/dsh-subprocess'
 import type { ProcessIdentity, ProcessInspector } from './process-inspector.ts'
+import type { ForegroundPgidReader } from './pty-foreground.ts'
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -50,11 +51,13 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
    * @param terminal - allocated node-pty process.
    * @param inspector - platform process/session operations.
    * @param graceMs - TERM-to-KILL and exit-wait grace.
+   * @param foregroundPgidReader - optional PTY-native foreground-group lookup.
    */
   constructor(
     private readonly terminal: IPty,
     private readonly inspector: ProcessInspector,
     private readonly graceMs: number,
+    private readonly foregroundPgidReader?: ForegroundPgidReader,
   ) {
     this.pid = terminal.pid
     this.rootIdentity = inspector.processTree(this.pid).find(member => member.pid === this.pid)
@@ -82,7 +85,9 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
   // oxlint-disable-next-line typescript/require-await -- Preserve promise rejection semantics at the async provider contract.
   async inspectForeground(): Promise<SubprocessTerminalForeground | undefined> {
     this.descendants()
-    const processGroupId = this.inspector.foregroundPgid(this.pid)
+    const processGroupId = this.foregroundPgidReader === undefined
+      ? this.inspector.foregroundPgid(this.pid)
+      : this.foregroundPgidReader()
     if (processGroupId === undefined) return undefined
     return {
       processGroupId,

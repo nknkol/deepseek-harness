@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-16-openharmony-terminal-process-inspection.md
+2026-08-16-openharmony-terminal-process-inspection.md: 662014126befea50d09b98cca091ef0c506922ed
+2026-08-16-openharmony-terminal-process-inspection.zh.md: 70dc819c176c2a8134ecf6f12d888ac1b807eeb6

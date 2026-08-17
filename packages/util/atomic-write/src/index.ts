@@ -1,5 +1,5 @@
 /**
- * Zero-dependency atomic file replacement and writer coordination.
+ * Atomic file replacement, no-replace publication, and writer coordination.
  * `writeFileAtomic` writes a random-suffix sibling with exclusive create and
  * the caller's permission bits, then renames it over the target, so readers
  * observe either the old or the new complete content and a replaced file ends
@@ -11,7 +11,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { link, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 /**
@@ -60,6 +60,77 @@ export async function writeFileAtomic(filename: string, content: string, options
   } catch (error) {
     await rm(temp, { force: true })
     throw error
+  }
+}
+
+type PublishFile = (source: string, target: string) => Promise<void>
+
+/** Injectable native publication operations for deterministic filesystem tests. */
+export interface PublishNoReplaceOptions {
+  /** First publication attempt; defaults to the POSIX hard-link primitive. */
+  linkFile?: PublishFile
+  /** No-replace rename fallback; defaults to OpenHarmony/Linux `renameat2`. */
+  renameNoReplace?: PublishFile
+}
+
+function isHardLinkUnsupported(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  return code === 'EACCES' || code === 'EPERM' || code === 'ENOTSUP' || code === 'EOPNOTSUPP'
+}
+
+type RenameAt2 = (
+  oldDirectory: number,
+  oldPath: string,
+  newDirectory: number,
+  newPath: string,
+  flags: number,
+) => number
+
+const AT_FDCWD = -100
+const RENAME_NOREPLACE = 1
+
+async function renameAtNoReplace(source: string, target: string): Promise<void> {
+  const platform = process.platform as NodeJS.Platform | 'openharmony'
+  if (platform !== 'linux' && platform !== 'openharmony') {
+    const error = new Error(`atomic-write: no-replace rename is unsupported on ${platform}`) as NodeJS.ErrnoException
+    error.code = 'ENOTSUP'
+    throw error
+  }
+  const { default: koffi } = await import('koffi')
+  const renameat2 = koffi.load('libc.so').func(
+    'int renameat2(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, unsigned int flags)',
+  ) as unknown as RenameAt2
+  const result = renameat2(AT_FDCWD, source, AT_FDCWD, target, RENAME_NOREPLACE)
+  if (result === 0) return
+  const errno = koffi.errno()
+  const error = new Error(`atomic-write: renameat2 failed for ${source}`) as NodeJS.ErrnoException & { dest?: string }
+  error.code = errno === 17 ? 'EEXIST' : `ERRNO_${errno}`
+  error.errno = errno
+  error.syscall = 'renameat2'
+  error.path = source
+  error.dest = target
+  throw error
+}
+
+/**
+ * Publish one staged file without replacing an existing target.
+ * Hard links provide the first no-replace primitive; OpenHarmony/Linux use
+ * `renameat2(RENAME_NOREPLACE)` when the filesystem rejects hard links.
+ * @param source - staged file path.
+ * @param target - final path.
+ * @param options - injectable publication operations.
+ */
+export async function publishNoReplace(
+  source: string,
+  target: string,
+  options: PublishNoReplaceOptions = {},
+): Promise<void> {
+  const publishLink = options.linkFile ?? link
+  try {
+    await publishLink(source, target)
+  } catch (error) {
+    if (!isHardLinkUnsupported(error)) throw error
+    await (options.renameNoReplace ?? renameAtNoReplace)(source, target)
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-atomic-write",
-  "description": "Zero-dependency atomic file replacement: exclusive-create random-suffix temp + rename carrying the caller-stated permissions (writeFileAtomic)",
+  "description": "Atomic file replacement and no-replace publication helpers",
   "version": "0.1.0-rc.5",
   "publishConfig": {
     "access": "public"
@@ -31,6 +31,9 @@
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
+  "dependencies": {
+    "koffi": "^3.1.5"
+  },
   "peerDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"

@@ -21,7 +21,7 @@
 pnpm install
 ```
 
-安装过程还会通过 `scripts/install-lefthook.mjs` 配置 worktree 本地的 Lefthook 钩子和 `dsh-translation-pairing` Git 合并驱动。[worktree 本地钩子 Agent Note](../.agents/notes/implemented/process/2026-07-27-worktree-local-lefthook.md) 负责钩子路径的安全约定；[自动配对合并 Agent Note](../.agents/notes/implemented/process/2026-08-08-automatic-translation-pairing-merges.md) 负责合并驱动。
+安装过程还会通过 `scripts/install-lefthook.mjs` 配置 worktree 本地的 Lefthook 钩子和 `dsh-translation-pairing` Git 合并驱动。在 OpenHarmony arm64 上，同一生命周期会将不可用的 `tsgolint` 平台包映射到 Linux arm64 包，通过 `scripts/elf-self-sign.ts` 校验并自签名当前 host 流程所需的 native ELF 文件，包括 Node native addon、映射后的 Lefthook 可执行文件、映射后的 `tsgolint` 可执行文件和已编译的 node-pty artifact，同时恢复其可执行权限，并通过 `scripts/with-harmonybrew-libs.mjs` 只向子进程注入 Homebrew 库目录；pnpm 会跳过 Koffi 不受支持的 native 安装脚本，根 `postinstall` 则通过 `scripts/prepare-koffi.mjs` 使用 Homebrew 的 `uname-is-linux` 调用 Koffi 原有的构建流程，并通过 `scripts/prepare-node-pty.mjs` 使用同一个受限的平台伪装调用 node-pty 原有的 node-gyp 构建流程；其他主机会跳过这些步骤。[OpenHarmony tsgolint 映射 Agent Note](../.agents/notes/implemented/process/2026-08-16-openharmony-tsgolint-package-mapping.md) 负责包映射；[OpenHarmony node-pty 源码构建 Agent Note](../.agents/notes/implemented/process/2026-08-16-openharmony-node-pty-source-build.md) 负责受限源码构建决策；[worktree 本地钩子 Agent Note](../.agents/notes/implemented/process/2026-07-27-worktree-local-lefthook.md) 负责钩子路径的安全约定；[自动配对合并 Agent Note](../.agents/notes/implemented/process/2026-08-08-automatic-translation-pairing-merges.md) 负责合并驱动。
 
 如果依赖是从缓存恢复或 `postinstall` 被跳过而导致任一集成缺失，请手动安装：
 

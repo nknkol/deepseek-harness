@@ -18,6 +18,23 @@ import { PublicZstdFrameDecoder } from '../src/zstd-public-decoder.ts'
 import { runPersistenceContract, meta, oneTurnLog } from '../../session-persistence/tests/contract.ts'
 import { runCoordinatorContract, type CoordinatorFixture } from '../../session-persistence/tests/coordinator-contract.ts'
 
+const fsPublication = vi.hoisted(() => ({
+  linkError: undefined as Error | undefined,
+}))
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return {
+    ...actual,
+    link: async (source: string, destination: string): Promise<void> => {
+      const error = fsPublication.linkError
+      fsPublication.linkError = undefined
+      if (error !== undefined) throw error
+      await actual.link(source, destination)
+    },
+  }
+})
+
 const MAGIC = Buffer.from([0x28, 0xB5, 0x2F, 0xFD])
 const roots: string[] = []
 const contexts: Context[] = []
@@ -107,6 +124,7 @@ function emptyStructuralFrame(descriptor: number): Buffer {
 }
 
 afterEach(async () => {
+  fsPublication.linkError = undefined
   vi.restoreAllMocks()
   for (const ctx of contexts.splice(0).reverse()) await ctx.fiber.dispose()
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true })
@@ -353,6 +371,18 @@ describe('JsonlSessionPersistence: default Zstandard encoding', () => {
       ...oneTurnLog().map(e => JSON.stringify(e)),
       '',
     ].join('\n'))
+    expect((await ctx.sessionPersistence.load(header.id)).events).toEqual(oneTurnLog())
+  })
+
+  it('falls back to rename when the filesystem denies hard-link publication', async () => {
+    const root = await freshRoot()
+    const ctx = await mount(root)
+    const header = meta('rename-publication-fallback', '/work')
+    fsPublication.linkError = Object.assign(new Error('hard links disabled'), { code: 'EACCES' })
+
+    await ctx.sessionPersistence.create(header)
+    await ctx.sessionPersistence.append(header.id, oneTurnLog())
+
     expect((await ctx.sessionPersistence.load(header.id)).events).toEqual(oneTurnLog())
   })
 

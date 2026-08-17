@@ -2,12 +2,12 @@
 
 English | [中文](README.zh.md)
 
-Zero-dependency atomic file replacement shared by file-backed stores that must never leave partial, symlink-hijacked, or wider-than-intended content on disk — the user-settings document (`dsh-settings-file`) and the credentials store (`dsh-credentials-local`).
+Atomic file replacement and no-replace publication shared by file-backed stores that must never leave partial, symlink-hijacked, or wider-than-intended content on disk.
 
 ## Surface
 
 ```ts
-import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { publishNoReplace, withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 
 declare const text: string
 declare const render: (previous: string) => string
@@ -18,6 +18,8 @@ await writeFileAtomic('/home/u/.dsh/settings.yaml', text, { mode: 0o600 })
 await withFileLock('/home/u/.dsh/settings.yaml', async () => {
   await writeFileAtomic('/home/u/.dsh/settings.yaml', render(text), { mode: 0o600 })
 })
+
+await publishNoReplace('/home/u/.dsh/staged.jsonl', '/home/u/.dsh/session.jsonl')
 ```
 
 `writeFileAtomic` commits one already-rendered string. The contract, in the order failures would exploit it:
@@ -29,6 +31,8 @@ await withFileLock('/home/u/.dsh/settings.yaml', async () => {
 - Parent directories are created; on any failure the temp is removed and the failure rethrown; readers observe either the old or the new complete content.
 
 `withFileLock` serializes the writers of one file across processes, for the read-render-commit cycles a bare atomic commit cannot make safe on its own. The lock is a `wx`-created `<filename>.lock` sibling, so readers never contend; waiters back off exponentially and fail with a timeout rather than block forever. A contender never removes the existing lock: age cannot distinguish a crashed owner from a paused live writer.
+
+`publishNoReplace` first uses a hard link and, when the filesystem rejects hard links, uses Linux/OpenHarmony `renameat2(RENAME_NOREPLACE)`. It never replaces an existing target. Koffi is loaded only when that fallback is needed.
 
 ## Model Experience
 

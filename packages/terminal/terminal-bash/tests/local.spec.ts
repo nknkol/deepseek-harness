@@ -140,8 +140,11 @@ describe('terminal-bash real shell', () => {
   it('wraps the exact shell argv under confined policy and unregisters on reload', async () => {
     const { ctx, root, agent, fiber, sandbox } = await harness('workspace-write')
     const created = await ctx.terminals.spawn(agent, { type: 'shell' })
+    const expectedShell = (process.platform as string) === 'openharmony'
+      ? await ctx.subprocess.resolveExecutable('bash')
+      : '/bin/bash'
     expect(sandbox.calls).toEqual([{
-      argv: ['/bin/bash', '--noprofile', '--norc', '-i'],
+      argv: [expectedShell, '--noprofile', '--norc', '-i'],
       policy: { mode: 'workspace-write', workspaceRoot: realpathSync.native(root), sessionId: 'agent-workspace-write' },
     }])
     await fiber.dispose()

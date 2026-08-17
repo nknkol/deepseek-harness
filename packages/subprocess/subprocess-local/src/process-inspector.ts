@@ -364,11 +364,11 @@ class MacProcessInspector extends PosixProcessInspector {
  * @returns Platform process inspector.
  */
 export function createProcessInspector(
-  platform: NodeJS.Platform = process.platform,
+  platform: NodeJS.Platform | 'openharmony' = process.platform,
   arch: NodeJS.Architecture = process.arch,
   internals: ProcessInspectorInternals = DEFAULT_INTERNALS,
 ): ProcessInspector {
-  if (platform === 'linux') return new LinuxProcessInspector(arch, internals)
+  if (platform === 'linux' || platform === 'openharmony') return new LinuxProcessInspector(arch, internals)
   if (platform === 'darwin') return new MacProcessInspector(internals)
   throw new Error(`subprocess-local: terminal inspection is unsupported on platform ${platform}`)
 }

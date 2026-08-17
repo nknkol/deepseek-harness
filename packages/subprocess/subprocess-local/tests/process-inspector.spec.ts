@@ -187,6 +187,15 @@ describe('Linux process inspector', () => {
     expect(createProcessInspector('linux', 'x64', fake.internals).isStdinWaiting(77)).toBe(false)
   })
 
+  it('uses the Linux /proc inspector for OpenHarmony', () => {
+    const fake = fakeInternals()
+    fake.dirs.set('/proc', ['10'])
+    fake.files.set('/proc/10/stat', stat(10, 20, 30, 40, '500'))
+    const inspector = createProcessInspector('openharmony', 'arm64', fake.internals)
+    expect(inspector.foregroundPgid(10)).toBe(40)
+    expect(inspector.processSession(30)).toEqual([{ pid: 10, started: '500' }])
+  })
+
   it('contains unreadable syscall, memory, and fdinfo boundaries', () => {
     const fake = fakeInternals()
     fake.dirs.set('/proc', ['100'])

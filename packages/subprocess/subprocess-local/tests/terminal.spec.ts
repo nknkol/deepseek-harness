@@ -184,6 +184,16 @@ describe('LocalTerminalHandle', () => {
     expect(Buffer.concat(chunks).toString('utf8')).toBe('hello €')
   })
 
+  it('uses the PTY foreground-group reader when one is provided', async () => {
+    const pty = new FakePty()
+    const inspector = new FakeInspector()
+    const handle = new LocalTerminalHandle(pty.asPty(), inspector, 10, () => 789)
+
+    expect(await handle.inspectForeground()).toEqual({ processGroupId: 789, inputWaiting: false })
+    expect(await handle.signalForeground('SIGINT')).toBe(789)
+    expect(inspector.groups).toEqual([[789, 'SIGINT']])
+  })
+
   it('rejects unsafe foreground signals and writes after exit', async () => {
     const pty = new FakePty()
     const inspector = new FakeInspector()

@@ -7,12 +7,13 @@
 
 import { randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { chmod, link, lstat, mkdir, open, readFile, realpath, readdir, rename, rm, stat } from 'node:fs/promises'
+import { chmod, lstat, mkdir, open, readFile, realpath, readdir, rename, rm, stat } from 'node:fs/promises'
 import type { BigIntStats, Dirent, Stats } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { TextDecoder } from 'node:util'
 import { FsError, FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
 import { copyFileDaclWin32, replaceFileWin32 } from './win32.ts'
+import { publishNoReplace } from '@deepseek-ai/dsh-atomic-write'
 
 const BINARY_SAMPLE_BYTES = 8192
 // Bound one non-abortable FileHandle.read so cancellation is observed between chunks.
@@ -90,7 +91,7 @@ export interface FsIoInternals {
   copyFileDacl?: (source: string, destination: string) => Promise<void>
   /** Override the Win32 security-preserving replacement boundary. */
   replaceFile?: (replaced: string, replacement: string) => Promise<void>
-  /** Override the hard-link no-replace publication boundary. */
+  /** Override the first no-replace publication boundary. */
   linkFile?: (existingPath: string, newPath: string) => Promise<void>
   /** Override target inspection after guarded publication fails. */
   inspectPublicationTarget?: (path: string) => Promise<BigIntStats>
@@ -526,9 +527,9 @@ async function throwGuardedCreateFailure(
  * inert as a mode on Windows but identifies replacement security semantics.
  * @param signal - cancellation checked before final publication.
  * @param internals - Test hook for pinning temp names and observing the staged file.
- * @param createIfAbsent - when provided, publish with a hard-link no-replace
- * primitive; a concurrent creator's file is preserved and this write is
- * rejected with `FS_NOT_OBSERVED` using the supplied display path.
+ * @param createIfAbsent - when provided, publish with a no-replace primitive;
+ * a concurrent creator's file is preserved and this write is rejected with
+ * `FS_NOT_OBSERVED` using the supplied display path.
  */
 export async function writeFileAtomic(
   absolutePath: string,
@@ -550,7 +551,6 @@ export async function writeFileAtomic(
   const platform = internals.platform ?? process.platform
   const copyFileDacl = internals.copyFileDacl ?? copyFileDaclWin32
   const replaceFile = internals.replaceFile ?? replaceFileWin32
-  const linkFile = internals.linkFile ?? link
   const inspectPublicationTarget = internals.inspectPublicationTarget
     ?? (path => lstat(path, { bigint: true }))
   const removeStagingDir = internals.removeStagingDir
@@ -577,7 +577,11 @@ export async function writeFileAtomic(
     throwIfAborted(signal, 'write')
     if (createIfAbsent !== undefined) {
       try {
-        await linkFile(tempPath, absolutePath)
+        await publishNoReplace(
+          tempPath,
+          absolutePath,
+          internals.linkFile === undefined ? {} : { linkFile: internals.linkFile },
+        )
       } catch (error: unknown) {
         await throwGuardedCreateFailure(error, absolutePath, createIfAbsent.displayPath, inspectPublicationTarget)
       }

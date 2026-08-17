@@ -68,8 +68,16 @@ function childEnvironment(spec: TerminalBackendSpawnSpec): Record<string, string
   }
 }
 
-function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy): string[] {
-  const argv = [config.shellPath, ...config.shellArgs]
+async function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy): Promise<string[]> {
+  let shellPath = config.shellPath
+  if ((process.platform as string) === 'openharmony' && shellPath === '/bin/bash') {
+    try {
+      shellPath = await ctx.subprocess.resolveExecutable(shellPath)
+    } catch (_missingSystemBash) {
+      shellPath = await ctx.subprocess.resolveExecutable('bash')
+    }
+  }
+  const argv = [shellPath, ...config.shellArgs]
   if (policy.mode === 'danger-full-access') return argv
   const sandbox = ctx.get('sandbox')
   if (sandbox === undefined) {
@@ -120,7 +128,7 @@ export class BashTerminalBackend implements TerminalBackend {
     spec.signal?.throwIfAborted()
     ensureSandboxModeFence(this.ctx, spec.owner)
     const policy = this.ctx.sandboxPolicy.resolve({ session: spec.owner.session })
-    const argv = spawnArgv(this.ctx, this.config, policy)
+    const argv = await spawnArgv(this.ctx, this.config, policy)
     if (argv[0] === undefined) throw new Error('terminal-bash: sandbox returned empty argv')
     const terminal = await this.spawnTerminal({
       argv,

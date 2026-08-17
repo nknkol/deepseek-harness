@@ -2,12 +2,12 @@
 
 [English](README.md) | 中文
 
-零依赖的原子文件替换，供绝不允许在磁盘上留下不完整、被符号链接劫持或权限过宽内容的文件型存储共用：用户设置文档（`dsh-settings-file`）与凭据存储（`dsh-credentials-local`）。
+原子文件替换与不覆盖发布，供绝不允许在磁盘上留下不完整、被符号链接劫持或权限过宽内容的文件型存储共用。
 
 ## 接口面
 
 ```ts
-import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { publishNoReplace, withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 
 declare const text: string
 declare const render: (previous: string) => string
@@ -18,6 +18,8 @@ await writeFileAtomic('/home/u/.dsh/settings.yaml', text, { mode: 0o600 })
 await withFileLock('/home/u/.dsh/settings.yaml', async () => {
   await writeFileAtomic('/home/u/.dsh/settings.yaml', render(text), { mode: 0o600 })
 })
+
+await publishNoReplace('/home/u/.dsh/staged.jsonl', '/home/u/.dsh/session.jsonl')
 ```
 
 `writeFileAtomic` 提交一份已经渲染好的字符串。约定按故障利用它的先后顺序列出：
@@ -29,6 +31,8 @@ await withFileLock('/home/u/.dsh/settings.yaml', async () => {
 - 自动创建父目录；任何失败都会移除临时文件并重新抛出该失败；读取方只会观察到旧内容或完整的新内容。
 
 `withFileLock` 跨进程串行化同一文件的写入方，服务于单靠原子提交无法保证安全的读-渲染-提交循环。锁是以 `wx` 创建的同目录 `<filename>.lock`，因此读取方从不参与竞争；等待方按指数退避，超时即失败而非无限阻塞。竞争者绝不移除现有锁：锁龄无法区分已经崩溃的所有者与被暂停但仍存活的写入方。
+
+`publishNoReplace` 首先使用硬链接；文件系统拒绝硬链接时，在 Linux/OpenHarmony 上改用 `renameat2(RENAME_NOREPLACE)`。它不会替换已有目标。只有需要该回退时才加载 Koffi。
 
 ## 模型体验
 
